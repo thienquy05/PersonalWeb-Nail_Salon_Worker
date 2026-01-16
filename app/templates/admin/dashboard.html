@@ -2,6 +2,29 @@
 {% block content %}
 <h2>Admin Dashboard</h2>
 
+<h3>Upcoming Appointments</h3>
+<ul>
+{% for a in appointments %}
+    <li style="margin-bottom: 15px; padding: 15px; background: #f9f9f9; border-left: 5px solid {% if a.status == 'scheduled' %}#27ae60{% else %}#c0392b{% endif %};">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <strong>{{ a.scheduled_at.strftime('%b %d, %Y at %I:%M %p') }}</strong><br>
+                User: {{ a.client_email }} <br> 
+                Status: <b>{{ a.status.upper() }}</b>
+            </div>
+            
+            {% if a.status == 'scheduled' %}
+            <form method="POST" action="/admin/appt/{{ a.id }}/cancel" style="margin:0;">
+                <button type="submit" class="btn btn-danger" style="padding: 5px 15px; font-size:14px; width:auto; margin:0;">Cancel</button>
+            </form>
+            {% endif %}
+        </div>
+    </li>
+{% else %}
+    <p>No appointments found.</p>
+{% endfor %}
+</ul>
+
 <h3>Recent Feedback</h3>
 <div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; margin-bottom:30px;">
@@ -22,31 +45,26 @@
     </table>
 </div>
 
-<h3>Appointments</h3>
+<h3>Coupons</h3>
 <ul>
-{% for a in appointments %}
-    <li style="margin-bottom: 10px; padding: 10px; background: #f9f9f9; border-left: 4px solid #2c3e50;">
-        <strong>{{ a.scheduled_at }}</strong> - Status: {{ a.status }}
+{% for c in coupons %}
+    <li style="margin-bottom: 10px; padding: 10px; background: #f9f9f9; border-left: 4px solid #2c3e50; display:flex; justify-content:space-between;">
+        <div>
+            <strong>{{ c.code }}</strong> - 
+            {% if c.is_used %}
+                <span style="color: red;">USED</span>
+            {% else %}
+                <span style="color: green;">ACTIVE</span>
+            {% endif %}
+            <br><small>Expires: {{ c.expires_at.strftime('%Y-%m-%d') }}</small>
+        </div>
+        
+        {% if not c.is_used %}
+        <form method="POST" action="/admin/coupon/{{ c.id }}/void" style="margin:0;">
+            <button type="submit" class="btn" style="padding: 5px 15px; font-size:14px; width:auto; margin:0; background:#7f8c8d;">Void</button>
+        </form>
+        {% endif %}
     </li>
 {% endfor %}
 </ul>
 {% endblock %}
-
-<h3>Coupons</h3>
-<ul>
-{% for c in coupons %}
-    <li style="margin-bottom: 10px; padding: 10px; background: #f9f9f9; border-left: 4px solid #2c3e50;">
-        <strong>{{ c.code }}</strong> 
-        
-        - Status: 
-        {% if c.is_used %}
-            <span style="color: red;">Used</span>
-        {% else %}
-            <span style="color: green;">Active</span>
-        {% endif %}
-        
-        <br>
-        <small>Expires: {{ c.expires_at.strftime('%Y-%m-%d') }}</small>
-    </li>
-{% endfor %}
-</ul>

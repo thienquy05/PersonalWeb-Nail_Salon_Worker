@@ -94,10 +94,12 @@ def appointment():
         scheduled_at = datetime.utcnow() + timedelta(days=1)
 
     appt = Appointment(
+        email_enc=encrypt(user_email),
         message_enc=encrypt(msg_raw),
         scheduled_at=scheduled_at,
         status="scheduled"
     )
+
     db.session.add(appt)
     db.session.commit()
 
@@ -149,20 +151,52 @@ def logout():
 @admin.route("/dashboard")
 @admin_required
 def dashboard():
+    # --- 1. Appointments (Fetch & Decrypt Email) ---
     appointments = Appointment.query.order_by(Appointment.scheduled_at.desc()).all()
+    for a in appointments:
+        try:
+            # We decrypt the email so the admin can see who booked
+            a.client_email = decrypt(a.email_enc)
+        except:
+            a.client_email = "Unknown (Decryption Error)"
+
+    # --- 2. Coupons ---
     coupons = Coupon.query.all()
     
-    # Process Feedback (Decrypting)
+    # --- 3. Feedback (The Missing Part) ---
     raw_feedback = Feedback.query.order_by(Feedback.created_at.desc()).all()
     feedbacks = []
     for f in raw_feedback:
         try:
+            # Decrypt the comment
             txt = decrypt(f.comment_enc)
         except:
             txt = "[Error Decrypting]"
-        feedbacks.append({'rating': f.rating, 'comment': txt, 'date': f.created_at})
+        
+        # Create a dictionary for the template
+        feedbacks.append({
+            'rating': f.rating, 
+            'comment': txt, 
+            'date': f.created_at
+        })
 
     return render_template("admin/dashboard.html", 
                          appointments=appointments, 
                          coupons=coupons, 
                          feedbacks=feedbacks)
+
+@admin.route("/appt/<int:id>/cancel", methods=["POST"])
+@admin_required
+def admin_cancel_appt(id):
+    appt = Appointment.query.get_or_404(id)
+    appt.status = "cancelled"
+    db.session.commit()
+    return redirect("/admin/dashboard")
+
+@admin.route("/coupon/<int:id>/void", methods=["POST"])
+@admin_required
+def void_coupon(id):
+    coupon = Coupon.query.get_or_404(id)
+    coupon.is_used = True
+    db.session.commit()
+    return redirect("/admin/dashboard")
