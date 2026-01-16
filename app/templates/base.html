@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nancy's Salon</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav>
+        <a href="/">🏠 Home</a>
+        <a href="/feedback">⭐ Feedback</a>
+        {% if session.get('admin_id') %}
+            <a href="/admin/dashboard">⚙️ Admin</a>
+            <a href="/admin/logout">Log Out</a>
+        {% endif %}
+    </nav>
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% if content %}
+            {{ content | safe }}
+        {% else %}
+            {% block content %}{% endblock %}
+        {% endif %}
+    </div>
+</body>
+</html>

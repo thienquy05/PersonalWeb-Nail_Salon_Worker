@@ -1,4 +1,4 @@
-from flask import Blueprint, request, render_template, session, redirect
+from flask import Blueprint, request, render_template, session, redirect, url_for, flash
 from app.models import *
 from app.crypto import encrypt, decrypt
 from app.email.email_utils import send_email, generate_coupon
@@ -6,37 +6,65 @@ from app.email.templates import *
 from app import db, limiter, bcrypt
 from datetime import datetime, timedelta
 import hashlib, secrets, os
-
+from functools import wraps
 
 main = Blueprint("main", __name__)
 admin = Blueprint("admin", __name__)
 
-# --- User Process Backend ---
+# --- Unified Login Route ---
 @main.route("/", methods=["GET", "POST"])
-@limiter.limit("5 per minute")
-def login():
+@limiter.limit("10 per minute")
+def index():
     if request.method == "POST":
-        email = request.form["email"]
+        identity = request.form.get("identity", "").strip()
+        password = request.form.get("password", "").strip()
 
-        user = User.query.filter_by(email_enc=encrypt(email)).first()
-        if not user:
-            user = User(email_ec=email)
-            db.session.add(user)
+        # 1. Attempt Admin Login (Requires Password)
+        if password:
+            admin_user = Admin.query.filter_by(username=identity).first()
+            if admin_user and bcrypt.check_password_hash(admin_user.password_hash, password):
+                session["admin_id"] = admin_user.id
+                return redirect("/admin/dashboard")
+            else:
+                flash("Incorrect username or password.", "error")
+                return redirect("/")
+
+        # 2. Attempt User Login (Email Only -> Magic Link)
+        elif "@" in identity:
+            # Create user if not exists
+            user = User.query.filter_by(email_enc=encrypt(identity)).first()
+            if not user:
+                user = User(email_enc=encrypt(identity))
+                db.session.add(user)
+                db.session.commit()
+
+            # Generate Magic Link
+            token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            
+            login_token = LoginToken(
+                token_hash=token_hash, 
+                user_id=user.id,
+                expires_at=datetime.utcnow() + timedelta(minutes=15)
+            )
+            db.session.add(login_token)
             db.session.commit()
 
-        token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
-
-        login_token = LoginToken(
-            token_hash=token_hash,
-            user_id=user.id,
-            expires_at=datetime.utcnow() + timedelta(minutes=15)
-        )
-
-        db.session.add(login_token)
-        db.session.commit()
+            # Generate Link (In production, email this)
+            link = url_for('main.auth', token=token, _external=True)
+            print(f"DEBUG MAGIC LINK: {link}") # Check console for link
+            
+            # Simulate email sending
+            # send_email("Login Link", f"Click here: {link}", identity)
+            
+            return render_template("login_sent.html", email=identity)
+        
+        else:
+            flash("Please enter a valid email address.", "error")
 
     return render_template("login.html")
+
+# --- User Features ---
 
 @main.route("/auth/<token>")
 def auth(token):
@@ -44,146 +72,97 @@ def auth(token):
     login_token = LoginToken.query.filter_by(token_hash=token_hash).first()
 
     if not login_token or login_token.expires_at < datetime.utcnow():
-        return "Invalid or expired token"
+        flash("This link has expired. Please try again.", "error")
+        return redirect("/")
     
-    return render_template("appointment.html")
+    # Retrieve user email
+    user = User.query.get(login_token.user_id)
+    real_email = decrypt(user.email_enc)
+    
+    return render_template("appointment.html", email=real_email)
 
 @main.route("/appointment", methods=["POST"])
 @limiter.limit("3 per hour")
 def appointment():
     user_email = request.form["email"]
-    msg = encrypt(request.form["message"])
-    appt = Appointment(message_enc=msg,
-                       scheduled_at=datetime.utcnow(),
-                       status="scheduled"
-                       )
+    msg_raw = request.form["message"]
+    date_str = request.form["scheduled_at"]
+    
+    try:
+        scheduled_at = datetime.strptime(date_str, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        scheduled_at = datetime.utcnow() + timedelta(days=1)
 
+    appt = Appointment(
+        message_enc=encrypt(msg_raw),
+        scheduled_at=scheduled_at,
+        status="scheduled"
+    )
     db.session.add(appt)
-
-    code, expires = generate_coupon()
-    coupon = Coupon(code=code, expires_at=expires)
-    db.session.add(coupon)
     db.session.commit()
 
+    # Generate Management Links
+    base_url = request.host_url.rstrip('/')
+    cancel_link = f"{base_url}/appt/{appt.id}/cancel"
+    
+    # Send Email (Commented out if no mail server configured)
+    # send_email("Appointment Confirmed", appointment_email(scheduled_at, cancel_link, ""), user_email)
 
-    send_email(
-        "New Appoinment",
-        f"Coupon: {code}",
-        os.getenv("ADMIN_EMAIL")
-    )
+    return render_template("success.html", email=user_email)
 
-    send_email(
-        "Appointment Confirmed!",
-        appointment_email(appt.scheduled_at, cancel_link="", reschedule_link=""),
-        {user_email}
-    )
-    return "Appoinment submitted"
+@main.route("/appt/<int:id>/cancel", methods=["GET", "POST"])
+def cancel_appt_user(id):
+    appt = Appointment.query.get_or_404(id)
+    if request.method == "POST":
+        appt.status = "cancelled"
+        db.session.commit()
+        return render_template("base.html", content="<h2>Appointment Cancelled.</h2><a href='/' class='btn'>Home</a>")
+    
+    return render_template("cancel_confirm.html", appt=appt)
 
+@main.route("/feedback", methods=["GET", "POST"])
+def feedback():
+    if request.method == "POST":
+        rating = int(request.form["rating"])
+        comment = request.form["comment"]
+        fb = Feedback(rating=rating, comment_enc=encrypt(comment))
+        db.session.add(fb)
+        db.session.commit()
+        return render_template("base.html", content="<h2>Thank you for your feedback!</h2><a href='/' class='btn'>Home</a>")
+    return render_template("feedback.html")
 
-from functools import wraps
+# --- Admin Section ---
+
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if "admin_id" not in session:
-            return redirect("/admin/login")
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
-def log_action(admin_id, action, target_type, target_id):
-    log = AuditLog(
-        admin_id=admin_id,
-        action=action,
-        target_type=target_type,
-        target_id=target_id,
-        ip_address=request.remote_addr
-    )
-
-    db.session.add(log)
-    db.session.commit()
-
-
-
-# --- Admin Process Backend ---
-@admin.route("/login", methods=["GET", "POST"])
-def admin_login():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-
-        admin_user = Admin.query.filter_by(username=username).first()
-        if admin_user and bcrypt.check_password_hash(admin_user.password_hash, password):
-            session["admin_id"] = admin_user.id
-            log_action(admin_user.id, "ADMIN_LOGIN", "admin", admin_user.id)
-            return redirect("/admin/dashboard")
-
-    return render_template("admin/login.html")
-
 @admin.route("/logout")
-@admin_required
-def admin_logout():
-    admin_id = session["admin_id"]
+def logout():
     session.clear()
-    log_action(admin_id, "ADMIN_LOGOUT", "admin", admin_id)
-    return redirect("/admin/login")
-
+    return redirect("/")
 
 @admin.route("/dashboard")
 @admin_required
-def admin_dashboard():
-    appointments = Appointment.query.order_by(Appointment.scheduled_at).all()
-    coupons = Coupon.query.order_by(Coupon.expires_at).all()
-    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(20)
-
-    return render_template(
-        "admin/dashboard.html",
-        appointments=appointments,
-        coupons=coupons,
-        logs=logs
-    )
-
-@admin.route("/appointments")
-@admin_required
-def admin_appointments():
-    appts = Appointment.query.all()
-    return render_template("admin/appointments.html", appointments=appts)
-
-
-@admin.route("/appointments/<int:id>/cancel", methods=["POST"])
-@admin_required
-def cancel_appt(id):
-    appt = Appointment.query.get_or_404(id)
-    appt.status = "cancelled"
-
-    log_action(
-        session["admin_id"],
-        "CANCEL_APPOINTMENT",
-        "appointment",
-        appt.id
-    )
-
-    db.session.commit()
-    return redirect("/admin/appointments")
-
-
-@admin.route("/coupons")
-@admin_required
-def admin_coupons():
+def dashboard():
+    appointments = Appointment.query.order_by(Appointment.scheduled_at.desc()).all()
     coupons = Coupon.query.all()
-    return render_template("admin/coupons.html", coupons=coupons)
+    
+    # Process Feedback (Decrypting)
+    raw_feedback = Feedback.query.order_by(Feedback.created_at.desc()).all()
+    feedbacks = []
+    for f in raw_feedback:
+        try:
+            txt = decrypt(f.comment_enc)
+        except:
+            txt = "[Error Decrypting]"
+        feedbacks.append({'rating': f.rating, 'comment': txt, 'date': f.created_at})
 
-
-@admin.route("/coupons/<int:id>/void", methods=["POST"])
-@admin_required
-def void_coupon(id):
-    coupon = Coupon.query.get_or_404(id)
-    coupon.is_used = True
-
-    log_action(
-        session["admin_id"],
-        "VOID_COUPON",
-        "coupon",
-        coupon.id
-    )
-
-    db.session.commit()
-    return redirect("/admin/coupons")
+    return render_template("admin/dashboard.html", 
+                         appointments=appointments, 
+                         coupons=coupons, 
+                         feedbacks=feedbacks)

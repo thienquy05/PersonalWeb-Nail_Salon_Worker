@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="text-align:center;">
+    <h2>Welcome to Nancy's Salon</h2>
+    <p>Please log in to book appointments.</p>
+</div>
+
+<form method="POST">
+    <label for="identity"><strong>Email or Username</strong></label>
+    <input type="text" name="identity" id="identity" placeholder="client@email.com OR staff_username" required>
+    
+    <label for="password"><strong>Password</strong> (Staff Only)</label>
+    <input type="password" name="password" id="password" placeholder="Leave empty if you are a client">
+    
+    <button type="submit" class="btn">Log In / Get Link</button>
+</form>
+{% endblock %}

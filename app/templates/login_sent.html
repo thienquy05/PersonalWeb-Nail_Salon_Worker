@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="text-align:center;">
+    <h2 style="color: green;">Check your Email! 📧</h2>
+    <p>We have sent a secure access link to <strong>{{ email }}</strong>.</p>
+    <p>Please click the link in your email to book your appointment.</p>
+    <hr>
+    <p style="font-size: 0.9em; color: #666;">(Since this is a demo, check the server console for the 'DEBUG MAGIC LINK')</p>
+    <a href="/" class="btn btn-secondary">Back to Home</a>
+</div>
+{% endblock %}

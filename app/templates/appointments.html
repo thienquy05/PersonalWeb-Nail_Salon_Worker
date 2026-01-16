@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📅 Book Appointment</h2>
+<form method="POST" action="/appointment">
+    <input type="hidden" name="email" value="{{ email }}">
+    
+    <label>Date & Time</label>
+    <input type="datetime-local" name="scheduled_at" required>
+    
+    <label>Special Requests</label>
+    <textarea name="message" rows="4" placeholder="e.g. Gel manicure, removal needed..."></textarea>
+    
+    <button type="submit" class="btn">Confirm Booking</button>
+</form>
+{% endblock %}
