@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="text-align: center; padding: 40px;">
+    <h2 style="color: #27ae60; font-size: 2em;">Booking Confirmed! ✅</h2>
+    <p>Thank you for choosing Nancy's.</p>
+    <p>We have sent a confirmation email to <strong>{{ email }}</strong>.</p>
+    
+    <div style="margin: 30px 0; padding: 20px; background: #f9f9f9; border-radius: 8px;">
+        <p><strong>Note:</strong> Check your email for links to <br>cancel or reschedule if needed.</p>
+    </div>
+
+    <a href="/" class="btn">Back to Home</a>
+</div>
+{% endblock %}

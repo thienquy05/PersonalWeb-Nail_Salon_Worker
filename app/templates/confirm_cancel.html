@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="text-align: center; border: 2px solid #c0392b; padding: 30px; border-radius: 10px;">
+    <h2 style="color: #c0392b;">⚠️ Cancel Appointment?</h2>
+    <p>Are you sure you want to cancel your appointment on:</p>
+    <h3>{{ appt.scheduled_at.strftime('%B %d, %Y at %I:%M %p') }}</h3>
+    
+    <form method="POST">
+        <button type="submit" class="btn btn-danger">Yes, Cancel It</button>
+    </form>
+    
+    <a href="/" class="btn btn-secondary" style="margin-top: 10px;">No, Keep It</a>
+</div>
+{% endblock %}

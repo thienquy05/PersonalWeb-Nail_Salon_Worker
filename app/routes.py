@@ -93,22 +93,29 @@ def appointment():
     except ValueError:
         scheduled_at = datetime.utcnow() + timedelta(days=1)
 
+# 1. Create Appointment
     appt = Appointment(
         email_enc=encrypt(user_email),
         message_enc=encrypt(msg_raw),
         scheduled_at=scheduled_at,
         status="scheduled"
     )
-
     db.session.add(appt)
-    db.session.commit()
 
-    # Generate Management Links
+    # 2. Create Coupon (Restored Logic)
+    code, expires = generate_coupon()
+    coupon = Coupon(code=code, expires_at=expires)
+    db.session.add(coupon)
+    
+    db.session.commit() # Commit both at once
+
+    # 3. Generate Links
     base_url = request.host_url.rstrip('/')
     cancel_link = f"{base_url}/appt/{appt.id}/cancel"
-    
-    # Send Email (Commented out if no mail server configured)
-    # send_email("Appointment Confirmed", appointment_email(scheduled_at, cancel_link, ""), user_email)
+
+    # 4. Send Email (Uncomment when ready)
+    # email_body = appointment_email(scheduled_at, cancel_link, "") + f"\n\nBonus Coupon: {code}"
+    # send_email("Appointment Confirmed!", email_body, user_email)
 
     return render_template("success.html", email=user_email)
 
