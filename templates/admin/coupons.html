@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Coupons</h2>
+
+<table>
+<tr>
+    <th>Code</th>
+    <th>Expires</th>
+    <th>Status</th>
+    <th>Action</th>
+</tr>
+
+{% for c in coupons %}
+<tr>
+    <td>{{ c.code }}</td>
+    <td>{{ c.expires_at }}</td>
+    <td>{{ "Used" if c.is_used else "Active" }}</td>
+    <td>
+        {% if not c.is_used %}
+        <form method="POST" action="/admin/coupons/{{ c.id }}/void">
+            <button>Void</button>
+        </form>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}
